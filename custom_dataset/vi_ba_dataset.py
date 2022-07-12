@@ -1,5 +1,6 @@
 from abc import ABC
 import os
+import string
 
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
@@ -26,6 +27,15 @@ class ViBaDataset(Dataset, ABC):
 
     def __getitem__(self, idx):
         vi, ba = self.data[idx]
+        for p in string.punctuation:
+            vi = vi.replace(p, f" {p} ")
+            ba = ba.replace(p, f" {p} ")
+        while "  " in vi:
+            vi = vi.replace("  ", " ")
+        while "  " in ba:
+            ba = ba.replace("  ", " ")
+        vi = vi.strip()
+        ba = ba.strip()
         vi_tokenize = self.tokenizer(vi)
         ba_tokenize = self.tokenizer(ba)
         return {

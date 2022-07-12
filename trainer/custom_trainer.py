@@ -40,31 +40,43 @@ def get_metric(metric_, tokenizer_):
 
 
 def main():
+    WORD_DROPOUT_RATIO = 0.15
+    WORD_REPLACEMENT_RATIO = 0.15
     model_checkpoint = "pretrained/bartpho_syllable"
     metric = load_metric("sacrebleu")
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
     model = CustomMbartModel.from_pretrained(model_checkpoint)
+    model.resize_token_embeddings(len(tokenizer.get_vocab()))
+    model.set_augment_config(word_dropout_ratio=WORD_DROPOUT_RATIO,
+                             word_replacement_ratio=WORD_REPLACEMENT_RATIO)
     compute_metric_func = get_metric(metric, tokenizer)
 
-    train_dataset, valid_dataset, test_dataset = ViBaDataset.get_datasets(data_folder="data",
+    train_dataset, valid_dataset, test_dataset = ViBaDataset.get_datasets(data_folder="data/all",
                                                                           tokenizer_path=model_checkpoint)
 
-    batch_size = 1
+    batch_size = 16
 
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
 
     trainer_args = Seq2SeqTrainingArguments(
-        "checkpoint/viba_bart-finetuned-vi-to-ba",
-        evaluation_strategy="epoch",
+        "checkpoint/viba_bart-finetuned",
+        metric_for_best_model="bleu",
+        evaluation_strategy="step",
         learning_rate=2e-5,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         weight_decay=0.01,
-        save_total_limit=3,
-        num_train_epochs=1,
-        predict_with_generate=False,
+        save_total_limit=1,
+        num_train_epochs=4,
+        predict_with_generate=True,
         fp16=False,
         push_to_hub=False,
+        logging_steps=100,
+        logging_first_step=True,
+        logging_dir="logging/viba_bart-finetuned",
+        eval_steps=100,
+        load_best_model_at_end=True,
+        generation_num_beams=5
     )
 
     trainer = Seq2SeqTrainer(
@@ -76,9 +88,12 @@ def main():
         tokenizer=tokenizer,
         compute_metrics=compute_metric_func
     )
+    trainer.evaluate(eval_dataset=valid_dataset, num_beams=5, max_length=512)
 
     trainer.train()
 
+    trainer.evaluate(test_dataset, num_beams=5, max_length=512)
+    trainer.save_model("checkpoint/best")
 
 if __name__ == "__main__":
     main()

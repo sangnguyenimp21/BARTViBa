@@ -89,8 +89,8 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            input_ids = self.word_replacement_ratio(input_ids)
-            decoder_input_ids = self.word_replacement_ratio(labels)
+            input_ids = self.word_replacement(input_ids)
+            decoder_input_ids = self.word_replacement(labels)
             decoder_input_ids = shift_tokens_right(decoder_input_ids, self.config.pad_token_id)
 
         outputs = self.model(
