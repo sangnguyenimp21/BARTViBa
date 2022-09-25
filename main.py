@@ -6,6 +6,7 @@ syllable_tokenizer = BartphoTokenizer.from_pretrained("vinai/bartpho-syllable")
 
 model.save_pretrained("pretrained/bartpho_syllable")
 syllable_tokenizer.save_pretrained("pretrained/bartpho_syllable")
+from transformers.models.bartpho.tokenization_bartpho import BartphoTokenizer
 # vocab = syllable_tokenizer.get_vocab()
 # print(syllable_tokenizer(["Hom nay la thu hai"]))
 #

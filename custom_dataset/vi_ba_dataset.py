@@ -1,5 +1,6 @@
 from abc import ABC
 import os
+import string
 
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
@@ -19,15 +20,32 @@ class ViBaDataset(Dataset, ABC):
         ba_data_path = os.path.join(data_folder, ba_data_file)
         vi_data = [item.replace("\n", "").strip() for item in open(vi_data_path, "r", encoding="utf8").readlines()]
         ba_data = [item.replace("\n", "").strip() for item in open(ba_data_path, "r", encoding="utf8").readlines()]
-        return list(zip(vi_data, ba_data))
+        output = list(zip(vi_data, ba_data))
+        if mode=="valid":
+            return output[:100]
+        elif mode == "test":
+            return output[:-10]
+        return output
 
     def __len__(self):
         return len(self.data)
+    
+    def norm_text(self, line):
+        for n in string.digits:
+            line = line.replace(n, f" {n} ")
+        for p in string.punctuation + ",.\\/:;–…":
+            line = line.replace(p, f" {p} ")
+        while "  " in line:
+            line = line.replace("  ", " ")
+        line = line.strip()
+        return line
 
     def __getitem__(self, idx):
         vi, ba = self.data[idx]
-        vi_tokenize = self.tokenizer(vi)
-        ba_tokenize = self.tokenizer(ba)
+        vi = self.norm_text(vi)
+        ba = self.norm_text(ba)
+        vi_tokenize = self.tokenizer(vi, truncation=True)
+        ba_tokenize = self.tokenizer(ba, truncation=True)
         return {
             "input_ids": vi_tokenize.input_ids,
             "attention_mask": vi_tokenize.attention_mask,
