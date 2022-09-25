@@ -1,4 +1,4 @@
-data
+#data
 pretrained
 __pycache__
 */__pycache__
@@ -7,3 +7,5 @@ __pycache__
 .idea
 */.idea
 */*/.idea
+logs
+checkpoint
