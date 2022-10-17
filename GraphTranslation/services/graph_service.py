@@ -8,7 +8,7 @@ import numpy as np
 
 from GraphTranslation.common.languages import Languages
 from GraphTranslation.common.data_types import RelationTypes
-from GraphTranslation.objects.graph import Graph, Word, Sentence, SentWord, Path, TranslationGraph, Relation
+from objects.graph import Graph, Word, Sentence, SentWord, Path, TranslationGraph, Relation
 from GraphTranslation.services.base_service import BaseServiceSingleton
 from GraphTranslation.services.nlpcore_service import TranslationNLPCoreService
 from GraphTranslation.utils.utils import word_distance

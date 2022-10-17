@@ -368,6 +368,14 @@ class SentWord(Word):
         return self.index
 
     @property
+    def is_end_sent(self):
+        return self._text == "/@"
+
+    @property
+    def is_end_paragraph(self):
+        return self._text == "//@"
+
+    @property
     def is_ner(self):
         if super().is_ner:
             return True
@@ -441,6 +449,8 @@ class SentWord(Word):
     def translations(self):
         if self.is_ner:
             return [self.ner_node]
+        if self.is_end_sent or self.is_end_paragraph:
+            return [self]
         output = {node.id: node for n in self.info_nodes for node in n.translations}
         output = list(output.values())
         output.sort(key=lambda node: self.get_translation_prop(node), reverse=True)

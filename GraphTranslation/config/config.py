@@ -3,12 +3,16 @@ import json
 
 from GraphTranslation.common.languages import Languages
 from GraphTranslation.utils.utils import norm_word
-from GraphTranslation.objects.singleton import Singleton
+from objects.singleton import Singleton
 
 
 class Config(metaclass=Singleton):
-    dst_words_path = "GraphTranslation/data/dictionary/bana_0504_w.txt"
-    src_words_path = "GraphTranslation/data/dictionary/vi_0504_w.txt"
+    dst_words_paths = ["GraphTranslation/data/dictionary/bana_0504_w.txt",
+                       "GraphTranslation/data/dictionary/bana_kriem.txt",
+                       "GraphTranslation/data/dictionary/dict.ba"]
+    src_words_paths = ["GraphTranslation/data/dictionary/vi_0504_w.txt",
+                       "GraphTranslation/data/dictionary/vi_kriem.txt",
+                       "GraphTranslation/data/dictionary/dict.vi"]
     src_syn_path = "GraphTranslation/data/synonyms/vi_syn_data.json"
     dst_syn_path = None
     src_custom_ner_path = "GraphTranslation/data/custom_ner/vi_ner.json"
@@ -72,24 +76,28 @@ class Config(metaclass=Singleton):
 
     def load_src_dst_dict(self):
         if self._dst_words is None or self._src_words is None or self._src_dst_mapping is None:
-            dst_words = [item.replace("\n", "").strip() \
-                         for item in open(self.dst_words_path, "r", encoding="utf8").readlines()]
-            dst_words = [item for item in dst_words if len(item) > 0]
-            dst_words += [self.upper_start_chars(w) for w in dst_words]
-            dst_words += [w.lower() for w in dst_words]
-            src_words = [item.replace("\n", "").strip() \
-                         for item in open(self.src_words_path, "r", encoding="utf8").readlines()]
-            src_words = [item for item in src_words if len(item) > 0]
-            src_words += [self.upper_start_chars(w) for w in src_words]
-            src_words += [w.lower() for w in src_words]
-            if len(dst_words) != len(src_words):
-                raise ValueError("Ba dict must be equal size to Vi dict")
+            all_dst_words = []
+            all_src_words = []
+            for dst_words_path, src_words_path in zip(self.dst_words_paths, self.src_words_paths):
+                dst_words = [item.replace("\n", "").strip() \
+                             for item in open(dst_words_path, "r", encoding="utf8").readlines()]
+                dst_words = [item for item in dst_words if len(item) > 0]
+                dst_words += [self.upper_start_chars(w) for w in dst_words]
+                dst_words += [w.lower() for w in dst_words]
+                src_words = [item.replace("\n", "").strip() \
+                             for item in open(src_words_path, "r", encoding="utf8").readlines()]
+                src_words = [item for item in src_words if len(item) > 0]
+                src_words += [self.upper_start_chars(w) for w in src_words]
+                src_words += [w.lower() for w in src_words]
+                if len(dst_words) != len(src_words):
+                    raise ValueError("Ba dict must be equal size to Vi dict")
+                all_dst_words += dst_words
+                all_src_words += src_words
 
-            self._dst_words = dst_words
-            self._src_words = src_words
-
+            self._dst_words = all_dst_words
+            self._src_words = all_src_words
             dictionary = set()
-            for src, dst in zip(src_words, dst_words):
+            for src, dst in zip(all_src_words, all_dst_words):
                 dictionary.add((src, dst))
             self._src_dst_mapping = dictionary
             self.load_syn_word_set()

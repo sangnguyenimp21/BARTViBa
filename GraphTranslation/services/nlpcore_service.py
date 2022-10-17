@@ -7,7 +7,7 @@ from vncorenlp import VnCoreNLP
 
 from GraphTranslation.common.languages import Languages
 from GraphTranslation.common.ner_labels import *
-from GraphTranslation.objects.graph import SentWord, Sentence, SyllableBasedSentence, SentCombineWord
+from objects.graph import SentWord, Sentence, SyllableBasedSentence, SentCombineWord
 from GraphTranslation.services.base_service import BaseServiceSingletonWithCache, BaseServiceSingleton
 from GraphTranslation.utils.utils import check_number
 
@@ -30,12 +30,6 @@ class NLPCoreService(BaseServiceSingleton):
             elif self.check_number(w.original_text):
                 w.ner_label = NUM
         return sentence
-
-    # @staticmethod
-    # def word_n_grams(words, n):
-    #     out = list(ngrams(words, n=n))
-    #     out = [" ".join(item) for item in out]
-    #     return out
 
     @staticmethod
     def word_n_grams(syllables: [SentCombineWord], n) -> List[Union[SentCombineWord, str]]:
@@ -93,8 +87,6 @@ class SrcNLPCoreService(NLPCoreService):
                 if candidate in self.word_set:
                     mapped_words.add(candidate)
                     text_ = text_.replace(f" {candidate} ", "  ")
-        # for word in mapped_words:
-        #     print(f"{word} : {word in self.word_set}")
         return mapped_words
 
     @staticmethod
@@ -142,9 +134,20 @@ class SrcNLPCoreService(NLPCoreService):
 
     def _annotate(self, text):
         text = text.strip()
+        for c in string.punctuation:
+            text = text.replace(c, f" {c} ")
+        while "\n\n" in text:
+            text = text.replace("\n\n", "\n")
+        paragraphs = text.split("\n")
         if text[-1] not in "?.:!":
             text += "."
-        sentences = self.nlpcore_connector.annotate(text=text)["sentences"]
+        sentences = []
+        for paragraph in paragraphs:
+            p_sentences = self.nlpcore_connector.annotate(text=paragraph)["sentences"]
+            p_sentences = [sentence + [{"form": "/@", "nerLabel": "O", "posTag": ""}] for sentence in p_sentences]
+            p_sentences.append([{"form": "//@", "nerLabel": "O", "posTag": ""}])
+            sentences += p_sentences
+        # sentences = self.nlpcore_connector.annotate(text=text)["sentences"]
         words = [w for sentence in sentences for w in sentence]
         out = [SentWord(text="@", begin=0, end=1, language=Languages.SRC, pos="")]
         start = 2

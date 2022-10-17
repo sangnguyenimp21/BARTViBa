@@ -4,7 +4,7 @@ from tqdm import tqdm
 import pickle
 from queue import Queue
 
-from GraphTranslation.objects.singleton import Singleton
+from objects.singleton import Singleton
 from GraphTranslation.config.config import Config
 from GraphTranslation.utils.utils import generate_id
 

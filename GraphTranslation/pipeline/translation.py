@@ -1,5 +1,5 @@
 from GraphTranslation.common.languages import Languages
-from GraphTranslation.objects.graph import TranslationGraph, Sentence, Path, Chunk
+from objects.graph import TranslationGraph, Sentence, Path, Chunk
 from GraphTranslation.utils.utils import *
 from GraphTranslation.services.base_service import BaseServiceSingleton
 from GraphTranslation.services.graph_service import GraphService

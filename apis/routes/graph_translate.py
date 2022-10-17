@@ -1,6 +1,6 @@
 from GraphTranslation.apis.routes.base_route import BaseRoute
 
-from GraphTranslation.objects.data import Data
+from objects.data import Data
 from GraphTranslation.pipeline.translation import TranslationPipeline
 
 

@@ -2,7 +2,7 @@ from rank_bm25 import BM25Okapi
 from tqdm import tqdm
 
 from GraphTranslation.common.languages import Languages
-from GraphTranslation.objects.graph import TranslationGraph
+from objects.graph import TranslationGraph
 from GraphTranslation.services.graph_service import GraphService
 from GraphTranslation.services.base_service import BaseServiceSingleton
 
