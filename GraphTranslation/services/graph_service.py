@@ -149,7 +149,8 @@ class GraphService(BaseServiceSingleton):
         dst_sentence = self.nlp_core_service.annotate(text=dst_text, language=Languages.DST)
         src_sentence = self.add_info_node(src_sentence)
         dst_sentence = self.add_info_node(dst_sentence)
-        translation_graph = TranslationGraph(src_sent=src_sentence, dst_sent=dst_sentence)
+        translation_graph = TranslationGraph(src_sent=src_sentence, dst_sent=dst_sentence,
+                                             check_valid_anchor=self.check_valid_anchor)
         translation_graph, extra_relations = self.find_anchor_parallel(translation_graph)
         [self.graph.update_relation_count(Relation.convert_relation_type(r, RelationTypes.TRANSLATE))
          for r in translation_graph.mapping_relations]
@@ -159,10 +160,11 @@ class GraphService(BaseServiceSingleton):
             src_chunks, dst_chunks = list(map(list, zip(*mapped_chunks)))
         else:
             src_chunks, dst_chunks = [], []
-        src_chunks = split_sent(translation_graph.src_sent, src_chunks)
-        dst_chunks = split_sent(translation_graph.dst_sent, dst_chunks)
-        not_mapped_chunks = src_chunks, dst_chunks
-        return mapped_chunks, not_mapped_chunks
+        # src_chunks = split_sent(translation_graph.src_sent, src_chunks)
+        # dst_chunks = split_sent(translation_graph.dst_sent, dst_chunks)
+        # not_mapped_chunks = src_chunks, dst_chunks
+        # return mapped_chunks, not_mapped_chunks
+        return mapped_chunks, []
 
     def load_from_parallel_corpus(self):
         self.logger.debug("GET TRANSLATION SCORE")
@@ -251,6 +253,10 @@ class GraphService(BaseServiceSingleton):
                 info_nodes = []
             word.info_nodes = info_nodes
         return words
+
+    @staticmethod
+    def check_valid_anchor(word):
+        return True
 
     def find_anchor_parallel(self, translation_graph: TranslationGraph):
         src_sent = translation_graph.src_sent

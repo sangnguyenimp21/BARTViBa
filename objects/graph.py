@@ -7,6 +7,7 @@ import codecs
 from rank_bm25 import BM25Okapi
 import numpy as np
 
+from common.postag.conjunction import CONJUNCTION
 from GraphTranslation.utils.utils import norm_word, word_distance
 from GraphTranslation.common.languages import Languages
 from GraphTranslation.common.data_types import RelationTypes, NodeType
@@ -26,6 +27,10 @@ class Word:
         self.type = NodeType.GRAPH_WORD
         self._num_words = 0 if text is None else len(self._text.strip().split())
         self.index = 0
+
+    @property
+    def is_conjunction(self):
+        return self.text in CONJUNCTION
 
     @property
     def is_end_sign(self):
@@ -1428,13 +1433,15 @@ class Chunk(Sentence):
 
 
 class TranslationGraph(Graph):
-    def __init__(self, src_sent: Sentence, dst_sent: Sentence = None):
+    def __init__(self, src_sent: Sentence, dst_sent: Sentence = None, check_valid_anchor=None):
         super(TranslationGraph, self).__init__()
         self.src_sent = src_sent
         self.dst_sent = dst_sent
         self.load_words(src_sent)
         self.load_words(dst_sent)
         self._co_occurrence_relations = None
+        self.check_valid_anchor = (lambda x: True) if check_valid_anchor is None else check_valid_anchor
+        print()
 
     def update_src_sentence(self):
         if self.src_sent is not None:
@@ -1535,7 +1542,8 @@ class TranslationGraph(Graph):
 
     @property
     def mapping_relations(self) -> List[MappingRelation]:
-        output = [r for w in self.src_sent for r in w.get_relation_by_type(RelationTypes.MAPPING)]
+        output = [r for w in self.src_sent for r in w.get_relation_by_type(RelationTypes.MAPPING)
+                  if self.check_valid_anchor(w)]
         return output
 
     @property
@@ -1564,6 +1572,62 @@ class TranslationGraph(Graph):
             output.append([src_set, dst_set])
         return output
 
+    @staticmethod
+    def norm_chunk_pair(src_chunk: Chunk, dst_chunk: Chunk):
+        print(src_chunk.text, "______", dst_chunk.text)
+        relations = []
+        for word in src_chunk.words:
+            word_mapping_relations = word.get_relation_by_type(RelationTypes.MAPPING)
+            if len(word_mapping_relations) == 0:
+                continue
+            relations += word_mapping_relations
+        if len(relations) == 0:
+            return None, None
+
+        src_start = min([r.src.begin_index for r in relations])
+        src_end = max([r.src.end_index for r in relations])
+
+        dst_start = min([r.dst.begin_index for r in relations])
+        dst_end = max([r.dst.end_index for r in relations])
+
+        _src_chunk = src_chunk.get_chunk(src_start, src_end)
+        _dst_chunk = dst_chunk.get_chunk(dst_start, dst_end)
+        return _src_chunk, _dst_chunk
+
+    def find_continuous_mapping(self, src_chunk: Chunk, dst_chunk: Chunk):
+        chunks = []
+        relations = []
+        for word in src_chunk.words:
+            word_mapping_relations = word.get_relation_by_type(RelationTypes.MAPPING)
+            if len(word_mapping_relations) == 0:
+                continue
+            relations += word_mapping_relations
+
+        relations.sort(key=lambda item: item.src.begin_index)
+        for r in relations:
+            if len(chunks) == 0:
+                chunks.append([r])
+            else:
+                last_chunk: List = chunks[-1]
+                last_relation = last_chunk[-1]
+                if r.src.begin_index == last_relation.src.end_index + 1:
+                    last_chunk.append(r)
+                elif r.src.begin_index > last_relation.src.end_index + 1:
+                    chunks.append([r])
+        chunks = [item for item in chunks if len(item) > 1]
+        output_chunks = []
+        for chunk_relations in chunks:
+            src_start = min([r.src.begin_index for r in chunk_relations])
+            src_end = max([r.src.end_index for r in chunk_relations])
+
+            dst_start = min([r.dst.begin_index for r in chunk_relations])
+            dst_end = max([r.dst.end_index for r in chunk_relations])
+
+            _src_chunk = src_chunk.get_chunk(src_start, src_end)
+            _dst_chunk = dst_chunk.get_chunk(dst_start, dst_end)
+            output_chunks.append((_src_chunk, _dst_chunk))
+        return output_chunks
+
     @property
     def mapped_chunks(self) -> List[Tuple[Chunk, Chunk]]:
         relations = self.mapping_relations
@@ -1573,7 +1637,8 @@ class TranslationGraph(Graph):
             if i-1 < 0:
                 src_start = 0
             else:
-                src_start = relations[i-1].src.begin_index + 1
+                # src_start = relations[i-1].src.begin_index + 1
+                src_start = relations[i-1].src.end_index + 1
             if i-1 < 0:
                 dst_start = 0
             else:
@@ -1585,13 +1650,27 @@ class TranslationGraph(Graph):
             if i >= len(relations):
                 src_end = self.src_sent.end_index
             else:
-                src_end = relations[i].src.end_index - 1
+                # src_end = relations[i].src.end_index - 1
+                src_end = relations[i].src.begin_index - 1
 
             src_chunk = self.src_sent.get_chunk(src_start, src_end)
             dst_chunk = self.dst_sent.get_chunk(dst_start, dst_end)
             if src_chunk is None or dst_chunk is None:
                 continue
             chunks.append((src_chunk, dst_chunk))
+            src_chunk, dst_chunk = self.norm_chunk_pair(src_chunk, dst_chunk)
+            if src_chunk is None or dst_chunk is None:
+                continue
+            chunks.append((src_chunk, dst_chunk))
+            # _src_chunk, _dst_chunk = self.norm_chunk_pair(src_chunk, dst_chunk)
+            # if _src_chunk is not None and _dst_chunk is not None:
+            #     chunks.append((_src_chunk, _dst_chunk))
+            extra_chunks = self.find_continuous_mapping(src_chunk, dst_chunk)
+            chunks += extra_chunks
+        chunk_dict = {
+            src_chunk.text: (src_chunk, dst_chunk) for (src_chunk, dst_chunk) in chunks
+        }
+        chunks = list(chunk_dict.values())
         return chunks
 
     def get_candidate(self, words):

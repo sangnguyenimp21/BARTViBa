@@ -12,6 +12,9 @@ class TranslationPipeline(BaseServiceSingleton):
         self.graph_service = GraphService()
         self.nlp_core_service = TranslationNLPCoreService()
 
+    def add_check_valid_anchor_func(self, func):
+        self.graph_service.check_valid_anchor = func
+
     def eval(self):
         self.nlp_core_service.eval()
 
