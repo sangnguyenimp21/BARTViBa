@@ -1,5 +1,5 @@
 from GraphTranslation.common.languages import Languages
-from GraphTranslation.objects.graph import TranslationGraph, Sentence, Path, Chunk
+from objects.graph import TranslationGraph, Sentence, Path, Chunk
 from GraphTranslation.utils.utils import *
 from GraphTranslation.services.base_service import BaseServiceSingleton
 from GraphTranslation.services.graph_service import GraphService
@@ -11,6 +11,9 @@ class TranslationPipeline(BaseServiceSingleton):
         super(TranslationPipeline, self).__init__()
         self.graph_service = GraphService()
         self.nlp_core_service = TranslationNLPCoreService()
+
+    def add_check_valid_anchor_func(self, func):
+        self.graph_service.check_valid_anchor = func
 
     def eval(self):
         self.nlp_core_service.eval()

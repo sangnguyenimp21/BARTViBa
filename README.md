@@ -21,3 +21,7 @@ There is also a colab file at <trainer_notebook.ipynb> guiding training process.
     >vncorenlp -Xmx2g GraphTranslation/vncorenlp/VnCoreNLP-1.1.1.jar -p 9000 -a "wseg,pos,ner,parse"
 * Then:  Start api server port 8000:
     >python app.py
+* 3 model types:
+    * BART
+    * BART_CHUNK
+    * BART_CHUNK_NER_ONLY
