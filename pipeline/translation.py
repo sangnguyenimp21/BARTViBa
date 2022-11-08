@@ -24,6 +24,9 @@ class Translator(BaseServiceSingleton):
         return " ".join(output)
 
     def __call__(self, text: str, model: str = "BART_CHUNK"):
+        if model is None:
+            model = "BART_CHUNK"
+            
         if model in ["BART_CHUNK", "BART_CHUNK_NER_ONLY"]:
             s = time.time()
             sentence = self.graph_translator.nlp_core_service.annotate(text, language=Languages.SRC)
