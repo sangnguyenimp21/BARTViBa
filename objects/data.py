@@ -20,3 +20,23 @@ class OutData(BaseModel):
         super(OutData, self).__init__(src=src, tgt=tgt)
         self.src = src
         self.tgt = tgt
+        
+        
+class DataSpeech(BaseModel):
+    text: str
+    gender: Optional[str]
+
+    def __init__(self, text: str, gender: str = None):
+        super(DataSpeech, self).__init__(text=text, gender=gender)
+        self.text = text
+        self.gender = gender
+        
+        
+class OutDataSpeech(BaseModel):
+    speech: str
+    speech_fm: Optional[str]
+
+    def __init__(self, speech: str, speech_fm: str = None):
+        super(OutDataSpeech, self).__init__(speech=speech, speech_fm=speech_fm)
+        self.speech = speech
+        self.speech_fm = speech_fm

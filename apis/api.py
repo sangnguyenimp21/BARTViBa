@@ -2,7 +2,7 @@ from fastapi import FastAPI
 
 from apis.routes.graph_translate import GraphTranslateRoute
 from apis.routes.translation import TranslateRoute
-
+from apis.routes.texttospeech import SpeakRoute
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -19,3 +19,4 @@ app.add_middleware(
 
 # app.include_router(GraphTranslateRoute().router)
 app.include_router(TranslateRoute().router)
+app.include_router(SpeakRoute().router)
