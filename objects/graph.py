@@ -366,11 +366,11 @@ class SentWord(Word):
 
     @property
     def begin_index(self):
-        return self.index
+        return self.begin
 
     @property
     def end_index(self):
-        return self.index
+        return self.end
 
     @property
     def is_end_sent(self):

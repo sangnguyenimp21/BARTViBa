@@ -8,12 +8,12 @@ from objects.singleton import Singleton
 
 class Config(metaclass=Singleton):
     dst_words_paths = ["data/dictionary/bana_0504_w.txt",
-                       "data/dictionary/bana_kriem.txt",
+                       "data/dictionary/norm_kriem.ba",
                        "data/dictionary/dict.ba"]
     src_words_paths = ["data/dictionary/vi_0504_w.txt",
-                       "data/dictionary/vi_kriem.txt",
+                       "data/dictionary/norm_kriem.vi",
                        "data/dictionary/dict.vi"]
-    src_syn_path = "data/synonyms/vi_syn_data.json"
+    src_syn_path = "data/synonyms/vi_syn_data_1.json"
     dst_syn_path = None
     src_custom_ner_path = "GraphTranslation/data/custom_ner/vi_ner.json"
     dst_custom_ner_path = "GraphTranslation/data/custom_ner/ba_ner.json"
