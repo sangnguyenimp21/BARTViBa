@@ -21,7 +21,9 @@ class Translator(BaseServiceSingleton):
                 output.append(w)
             else:
                 continue
-        return " ".join(output)
+        output = " ".join(output)
+        output = output[0].capitalize() + output[1:]
+        return output
 
     def __call__(self, text: str, model: str = "BART_CHUNK"):
         if model in ["BART_CHUNK", "BART_CHUNK_NER_ONLY"]:
@@ -43,7 +45,7 @@ class Translator(BaseServiceSingleton):
             while i < len(mapped_words) - 1:
                 src_from_node = mapped_words[i]
                 if src_from_node.is_ner:
-                    ner_text = self.graph_translator.translate_ner(src_from_node.original_upper)
+                    ner_text = self.graph_translator.translate_ner(src_from_node)
                     if src_from_node.ner_label in [NUM]:
                         result.append(ner_text.lower())
                     else:
@@ -101,6 +103,8 @@ class Translator(BaseServiceSingleton):
                                 max_score = scores[j]
                         result[i] = best_candidate.text
                         print(f"word {best_candidate.text}: {max_score}")
+                    if i > 0 and result[i-1].endswith("/@") or result[i-1].endswith("//@"):
+                        result[i] = result[i].capitalize()
             output = result
             output = "  ".join(output).replace("//@", "\n").replace("/@", ".").replace("@", "")
             while "  " in output or ". ." in output:

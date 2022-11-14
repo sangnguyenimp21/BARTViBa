@@ -502,6 +502,10 @@ class SentCombineWord(SentWord):
         self.children = []
         self.is_upper = syllables[0].is_upper
 
+    @property
+    def original_upper(self):
+        return " ".join([item.original_upper for item in self.syllables])
+
     def get_child_combinations(self):
         output = []
         words = self.syllables
