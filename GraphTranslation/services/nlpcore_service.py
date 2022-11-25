@@ -99,9 +99,13 @@ class SrcNLPCoreService(NLPCoreService):
                 new_words.append(w)
             else:
                 pre_word = new_words[-1]
-                new_word = SentWord(text=" ".join([pre_word.original_upper, w.original_upper]),
-                                    begin=pre_word.begin, end=w.end, language=w.language,
-                                    pos=pre_word.pos, ner_label=pre_word.ner_label)
+                if isinstance(pre_word, SentCombineWord):
+                    new_word = SentCombineWord([*pre_word.syllables, w])
+                else:
+                    new_word = SentCombineWord([pre_word, w])
+                # new_word = SentWord(text=" ".join([pre_word.original_upper, w.original_upper]),
+                #                     begin=pre_word.begin, end=w.end, language=w.language,
+                #                     pos=pre_word.pos, ner_label=pre_word.ner_label)
                 new_words[-1] = new_word
         return new_words
 

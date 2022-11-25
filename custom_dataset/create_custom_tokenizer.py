@@ -31,7 +31,7 @@ for ba_file in ba_files:
 syllable_tokenizer = BartphoTokenizer.from_pretrained("pretrained/bartpho_syllable")
 print(syllable_tokenizer.get_vocab()["<unk>"])
 syllable_tokenizer.add_tokens(list(ba_tokens), special_tokens=True)
-syllable_tokenizer.save_pretrained("pretrained/bartpho_syllable_aligned")
+syllable_tokenizer.save_pretrained("pretrained/bartpho_syllable")
 
 print(syllable_tokenizer.tokenize(l))
 a = syllable_tokenizer.encode(l)

@@ -21,7 +21,9 @@ class Translator(BaseServiceSingleton):
                 output.append(w)
             else:
                 continue
-        return " ".join(output)
+        output = " ".join(output)
+        output = output[0].capitalize() + output[1:]
+        return output
 
     def __call__(self, text: str, model: str = "BART_CHUNK"):
         if model is None:
@@ -36,17 +38,17 @@ class Translator(BaseServiceSingleton):
             translation_graph.update_src_sentence()
             if model == "BART_CHUNK":
                 mapped_words = [w for w in translation_graph.src_sent if len(w.translations) > 0 or w.is_ner
-                                or w.is_end_sent or w.is_end_paragraph]
+                                or w.is_end_sent or w.is_end_paragraph or w.is_punctuation or w.is_conjunction]
             else:
-                mapped_words = [w for w in translation_graph.src_sent if w.is_punctuation
-                                or w.is_ner or w.is_end_sent or w.is_end_paragraph]
+                mapped_words = [w for w in translation_graph.src_sent if w.is_ner
+                                or w.is_end_sent or w.is_end_paragraph or w.is_punctuation or w.is_conjunction]
             result = []
             src_mapping = []
             i = 0
             while i < len(mapped_words) - 1:
                 src_from_node = mapped_words[i]
                 if src_from_node.is_ner:
-                    ner_text = self.graph_translator.translate_ner(src_from_node.original_upper)
+                    ner_text = self.graph_translator.translate_ner(src_from_node)
                     if src_from_node.ner_label in [NUM]:
                         result.append(ner_text.lower())
                     else:
@@ -61,11 +63,15 @@ class Translator(BaseServiceSingleton):
                 src_to_node = mapped_words[i + 1]
                 if src_from_node.end_index < src_to_node.begin_index - 1:
                     s = time.time()
-                    chunk = translation_graph.src_sent.get_chunk(src_from_node.begin_index + 1,
-                                                                 src_to_node.end_index - 1)
-                    translated_chunk = self.model_translator.translate_cache(chunk.text)
-                    result.append(translated_chunk)
-                    print(f"CHUNK TRANSLATE {chunk.text} -> {translated_chunk} : {time.time() - s}")
+                    chunk = translation_graph.src_sent.get_chunk(src_from_node.end_index,
+                                                                 src_to_node.begin_index - 1)
+                    if chunk is not None:
+                        chunk_text = chunk.text
+                        chunk_text = chunk_text.replace("//@", "").replace("/@", "").replace("@", "").replace(".", "").strip()
+                        if len(chunk_text) > 0:
+                            translated_chunk = self.model_translator.translate_cache(chunk_text)
+                            result.append(translated_chunk)
+                            print(f"CHUNK TRANSLATE {chunk.text} -> {translated_chunk} : {time.time() - s}")
                 i += 1
 
             if len(result) >= 3:
@@ -103,7 +109,11 @@ class Translator(BaseServiceSingleton):
                                 best_candidate = candidate
                                 max_score = scores[j]
                         result[i] = best_candidate.text
+                        print("CANDIDATES", candidates, " >>>BEST CANDIDATE>>>", best_candidate.text)
+
                         print(f"word {best_candidate.text}: {max_score}")
+                    if i > 0 and result[i-1].endswith("/@") or result[i-1].endswith("//@"):
+                        result[i] = result[i].capitalize()
             output = result
             output = "  ".join(output).replace("//@", "\n").replace("/@", ".").replace("@", "")
             while "  " in output or ". ." in output:

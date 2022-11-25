@@ -28,12 +28,14 @@ for ba_file in ba_files:
         for word in words:
             ba_tokens.add(word)
 
-syllable_tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-vi-en")
-print(syllable_tokenizer.get_vocab()["<unk>"])
-syllable_tokenizer.add_tokens(list(ba_tokens), special_tokens=True)
-syllable_tokenizer.save_pretrained("pretrained/marian")
+tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-vi-en")
+print(tokenizer.get_vocab()["<unk>"])
+ba_token_list = list(ba_tokens)
+ba_token_list.sort()
+tokenizer.add_tokens(ba_token_list, special_tokens=True)
+tokenizer.save_pretrained("pretrained/marian")
 
-print(syllable_tokenizer.tokenize(l))
-a = syllable_tokenizer.encode(l)
-b = syllable_tokenizer.decode(a)
+print(tokenizer.tokenize(l))
+a = tokenizer.encode(l)
+b = tokenizer.decode(a)
 print(b)
