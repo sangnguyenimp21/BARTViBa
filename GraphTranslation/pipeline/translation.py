@@ -85,7 +85,7 @@ class TranslationPipeline(BaseServiceSingleton):
                     # _output = ""
                     # for word in ner_text.strip().split():
                     #     _output += f" {word[0].upper() + word[1:]}"
-                return output
+            return output
         else:
             ner_text = ner.original_upper
             print(f"NER {ner_text}")
