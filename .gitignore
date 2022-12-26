@@ -1,12 +1,10 @@
 #data
 pretrained
 __pycache__
-*/__pycache__
-*/*/__pycache__
-*/*/*/__pycache__
 .idea
 */.idea
 */*/.idea
 logs
 checkpoint
 data/cache
+.ipynb_checkpoints
