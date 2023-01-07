@@ -100,35 +100,26 @@ class TranslationPipeline(BaseServiceSingleton):
                     #     _output += f" {word[0].upper() + word[1:]}"
             return " ".join([item.capitalize() for item in output.split()])
         else:
-            ner_text = ner.original_upper
-            print(f"NER {ner_text}")
-            ner_text = f" {ner_text} "
-            if language == Languages.SRC:
-                mapped_word = list(self.nlp_core_service.src_dict_based_service.map_dictionary(ner_text))
-                mapped_word.sort(key=lambda w: len(w), reverse=True)
-                mapped_word = [self.graph_service.graph.get_node_by_text(w, language=language) for w in mapped_word]
-                for word in mapped_word:
-                    translations = word.translations
-                    print(word, word.translations)
-                    if word.original_upper in original_ner_text and len(translations) > 0:
-                        ner_text = ner_text.replace(f" {word.original_upper} ", f" {translations[0].original_upper} ")
-                        original_ner_text = original_ner_text.replace(f" {word.original_upper} ", f" ")
-                _output = ""
-                for word in ner_text.strip().split():
-                    _output += f" {word[0].upper() + word[1:]}"
-                return _output.strip()
-            else:
-                raise NotImplementedError("Need to implement map dictionary for dst language")
-
-        # ner_text = f" {ner_text.lower()} "
-        # mapped_words = self.graph_service.get_words(ner_text, language)
-        # mapped_words.sort(key=lambda item: len(item[0]), reverse=True)
-        # for src_text, dst_text in mapped_words:
-        #     ner_text = ner_text.replace(f" {src_text} ", f" {dst_text} ")
-        # _output = ""
-        # for word in ner_text.strip().split():
-        #     _output += f" {word[0].upper() + word[1:]}"
-        # return _output.strip()
+            # ner_text = ner.original_upper
+            # print(f"NER {ner_text}")
+            # ner_text = f" {ner_text} "
+            # if language == Languages.SRC:
+            #     mapped_word = list(self.nlp_core_service.src_dict_based_service.map_dictionary(ner_text))
+            #     mapped_word.sort(key=lambda w: len(w), reverse=True)
+            #     mapped_word = [self.graph_service.graph.get_node_by_text(w, language=language) for w in mapped_word]
+            #     for word in mapped_word:
+            #         translations = word.translations
+            #         print(word, word.translations)
+            #         if word.original_upper in original_ner_text and len(translations) > 0:
+            #             ner_text = ner_text.replace(f" {word.original_upper} ", f" {translations[0].original_upper} ")
+            #             original_ner_text = original_ner_text.replace(f" {word.original_upper} ", f" ")
+            #     _output = ""
+            #     for word in ner_text.strip().split():
+            #         _output += f" {word[0].upper() + word[1:]}"
+            #     return _output.strip()
+            # else:
+            #     raise NotImplementedError("Need to implement map dictionary for dst language")
+            return " ".join([item.capitalize() for item in original_ner_text.split()])
 
     def extract_chunks(self, src_text: str, dst_text: str):
         return self.graph_service.extract_chunks(src_text=src_text, dst_text=dst_text)
