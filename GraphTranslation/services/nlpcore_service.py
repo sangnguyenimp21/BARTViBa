@@ -145,26 +145,41 @@ class SrcNLPCoreService(NLPCoreService):
         paragraphs = text.split("\n")
         if text[-1] not in "?.:!":
             text += "."
-        sentences = []
+        words = [{"form": "@", "nerLabel": "O", "posTag": "", "head": None, "index": 0}]
         for paragraph in paragraphs:
             p_sentences = self.nlpcore_connector.annotate(text=paragraph)["sentences"]
-            p_sentences = [sentence + [{"form": "/@", "nerLabel": "O", "posTag": ""}] for sentence in p_sentences]
-            p_sentences.append([{"form": "//@", "nerLabel": "O", "posTag": ""}])
-            sentences += p_sentences
+            for sentence in p_sentences:
+                offset = len(words) - 1
+                for word in sentence:
+                    word["index"] += offset
+                    word["head"] += offset
+                    words.append(word)
+                words.append({"form": "/@", "nerLabel": "O", "posTag": "", "head": None, "index": len(words)})
+            words.append({"form": "//@", "nerLabel": "O", "posTag": "", "head": None, "index": len(words)})
+            # p_sentences = [sentence + [{"form": "/@", "nerLabel": "O", "posTag": "", "head": None, "index": 0}] for sentence in p_sentences]
+            # p_sentences.append([{"form": "//@", "nerLabel": "O", "posTag": "", "head": None}])
+            # sentences += p_sentences
         # sentences = self.nlpcore_connector.annotate(text=text)["sentences"]
-        words = [w for sentence in sentences for w in sentence]
-        out = [SentWord(text="@", begin=0, end=1, language=Languages.SRC, pos="")]
+        # words = [w for sentence in sentences for w in sentence]
+        out = []
         start = 2
+        word_dict = {}
         for w in words:
             text = w["form"]
             end = start + len(text)
             word = SentWord(text=w["form"].replace("_", " "), begin=start, end=end, language=Languages.SRC,
-                            pos=w.get("posTag", ""), ner_label=w["nerLabel"])
+                            pos=w.get("posTag", ""), ner_label=w["nerLabel"], head_id=w["head"],
+                            original_id=w["index"])
+            word_dict[word.original_id] = word
             if len(out) > 0:
                 word.pre = out[-1]
                 out[-1].next = word
             out.append(word)
             start = end + 1
+        for word in out:
+            if word.head_id is None:
+                continue
+            word.head = word_dict[word.head_id]
         return out
 
 
