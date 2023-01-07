@@ -66,26 +66,39 @@ class TranslationPipeline(BaseServiceSingleton):
         return results
 
     def translate_ner(self, ner, language=Languages.SRC):
-        original_ner_text = ner.original_upper
+        original_ner_text = ner.original_text
         if isinstance(ner, SentCombineWord):
             output = f" {original_ner_text} "
-            for syllable in ner.syllables:
-                if syllable.is_upper:
-                    continue
-                ner_text = syllable.text
-                if language == Languages.SRC:
-                    mapped_word = list(self.nlp_core_service.src_dict_based_service.map_dictionary(ner_text))
-                    mapped_word.sort(key=lambda w: len(w), reverse=True)
-                    mapped_word = [self.graph_service.graph.get_node_by_text(w, language=language) for w in mapped_word]
-                    for word in mapped_word:
-                        translations = word.translations
-                        if word.original_upper in original_ner_text and len(translations) > 0:
-                            output = output.replace(f" {word.original_upper} ", f" {translations[0].original_upper} ")
-                            original_ner_text = original_ner_text.replace(f" {word.original_upper} ", f" ")
+            if ner.root is None and len(ner.syllables) > 1:
+                sentence = self.nlp_core_service.annotate(output, language=language)
+                words = sentence.words[1:-2]
+                ner_words = []
+                for word in words:
+                    if isinstance(word, SentCombineWord):
+                        ner_words += word.syllables
+                    else:
+                        ner_words.append(word)
+                ner = SentCombineWord(syllables=ner_words)
+            if ner.root is not None:
+                if len(ner.syllables) > 1:
+                    syllable = ner.root
+                    # for syllable in ner.syllables:
+                    #     if syllable.is_upper:
+                    #         continue
+                    ner_text = syllable.text
+                    if language == Languages.SRC:
+                        mapped_word = list(self.nlp_core_service.src_dict_based_service.map_dictionary(ner_text))
+                        mapped_word.sort(key=lambda w: len(w), reverse=True)
+                        mapped_word = [self.graph_service.graph.get_node_by_text(w, language=language) for w in mapped_word]
+                        for word in mapped_word:
+                            translations = word.translations
+                            if word.original_text in original_ner_text and len(translations) > 0:
+                                output = output.replace(f" {word.original_text} ", f" {translations[0].original_text} ")
+                                original_ner_text = original_ner_text.replace(f" {word.original_text} ", f" ")
                     # _output = ""
                     # for word in ner_text.strip().split():
                     #     _output += f" {word[0].upper() + word[1:]}"
-            return output
+            return " ".join([item.capitalize() for item in output.split()])
         else:
             ner_text = ner.original_upper
             print(f"NER {ner_text}")

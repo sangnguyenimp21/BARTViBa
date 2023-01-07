@@ -247,7 +247,7 @@ class Word:
             new_paths = []
             for path in paths:
                 new_paths += path.add_next_nodes(self.next_words)
-            paths = self.find_path(dst_node, depth-1, new_paths)
+            paths = self.find_path(dst_node, depth - 1, new_paths)
         return paths
 
     def contains(self, others):
@@ -303,10 +303,11 @@ class Word:
 
 class SentWord(Word):
     def __init__(self, text, language: Languages, begin=None, end=None, pos=None, ner_label=None, index=None,
-                 info_nodes=None, is_upper=None):
+                 info_nodes=None, is_upper=None, head_id=None, original_id=None):
         super(SentWord, self).__init__(text, language)
         if is_upper is not None:
             self.is_upper = is_upper
+        self.original_id = original_id
         self.index = begin if index is None else index
         self.begin = begin
         self.end = end
@@ -314,8 +315,10 @@ class SentWord(Word):
         self.pre = None
         self.pos = pos if pos is not None else ""
         self.ner_label = ner_label
+        self.head_id = head_id
         self.info_nodes: List[Word] = [] if info_nodes is None else info_nodes
         self.ner_node = None
+        self.head = None
         self.type = NodeType.SENT_WORD
 
     @property
@@ -506,6 +509,17 @@ class SentCombineWord(SentWord):
         self.parent = None
         self.children = []
         self.is_upper = syllables[0].is_upper
+
+    @property
+    def root(self):
+        out = self.syllables[0]
+        syllable_ids = [id(item) for item in self.syllables]
+        while id(out.head) in syllable_ids:
+            out = out.head
+        for syllable in self.syllables:
+            if id(syllable) != id(out) and id(syllable.head) == id(out.head):
+                return None
+        return out
 
     @property
     def original_upper(self):
@@ -859,7 +873,8 @@ class Graph:
         return {
             WORDS: {key: word.dict for key, word in self.words.items()},
             RELATIONS: {key: relation.dict for key, relation in self.relations.items()},
-            CO_OCCURRENCE_INDEX: codecs.encode(pickle.dumps(self.co_occurrence_index, pickle.HIGHEST_PROTOCOL), "base64").decode(),
+            CO_OCCURRENCE_INDEX: codecs.encode(pickle.dumps(self.co_occurrence_index, pickle.HIGHEST_PROTOCOL),
+                                               "base64").decode(),
             DST_N_GRAM_DATA: self.dst_n_gram_data
         }
 
@@ -871,7 +886,8 @@ class Graph:
         dst_n_gram_data = data[DST_N_GRAM_DATA]
         graph = Graph()
         graph.words = {key: Word.from_json(item) for key, item in word_jsons.items()}
-        relations = {key: Relation.get_class(item[TYPE]).from_json(item, graph.get_node_by_id) for key, item in relation_jsons.items()}
+        relations = {key: Relation.get_class(item[TYPE]).from_json(item, graph.get_node_by_id) for key, item in
+                     relation_jsons.items()}
         graph.relations = relations
         graph.co_occurrence_index = co_occurrence_index
         graph.dst_n_gram_data = dst_n_gram_data
@@ -905,7 +921,7 @@ class Path:
         if self.dst is not None:
             if self.nodes[-1] == self.dst:
                 return True
-            if self.nodes[-1].has_next_word(self.dst) and (self.min_length is None or len(self) >= self.min_length)\
+            if self.nodes[-1].has_next_word(self.dst) and (self.min_length is None or len(self) >= self.min_length) \
                     and (self.max_length is None or len(self) <= self.max_length):
                 self.nodes.append(self.dst)
                 return True
@@ -1061,7 +1077,8 @@ class Path:
     def get_align_score(self, words: List[Word]):
         scores = []
         for node in self.nodes:
-            scores.append(max(max(node.get_co_occurrence_prop(word), word.get_translation_prop(node)) for word in words))
+            scores.append(
+                max(max(node.get_co_occurrence_prop(word), word.get_translation_prop(node)) for word in words))
         score = sum(scores) / len(scores)
         # print("PATH SCORE", self, score)
         return score
@@ -1292,7 +1309,7 @@ class Sentence:
         words = self.words
         for i in range(1, 4):
             for j in range(len(words) - i + 1):
-                output.append(SentCombineWord(words[j:j+i]))
+                output.append(SentCombineWord(words[j:j + i]))
         return output
 
     @words.setter
@@ -1634,15 +1651,15 @@ class TranslationGraph(Graph):
         chunks = []
         n_chunks = len(relations) + 1
         for i in range(n_chunks):
-            if i-1 < 0:
+            if i - 1 < 0:
                 src_start = 0
             else:
                 # src_start = relations[i-1].src.begin_index + 1
-                src_start = relations[i-1].src.end_index + 1
-            if i-1 < 0:
+                src_start = relations[i - 1].src.end_index + 1
+            if i - 1 < 0:
                 dst_start = 0
             else:
-                dst_start = relations[i-1].dst.end_index + 1
+                dst_start = relations[i - 1].dst.end_index + 1
             if i >= len(relations):
                 dst_end = self.dst_sent.end_index
             else:
@@ -1698,7 +1715,8 @@ class TranslationGraph(Graph):
         candidates = [item["node"] for item in candidates]
         return candidates
 
-    def extract_path(self, from_node: Word, to_node: Word, candidates: List[Word], chunk_words: List[Word], k: int = None,
+    def extract_path(self, from_node: Word, to_node: Word, candidates: List[Word], chunk_words: List[Word],
+                     k: int = None,
                      max_length=None, min_length=None) -> List[Path]:
         s = time.time()
         k = 5 if k is None else k
@@ -1830,7 +1848,7 @@ class TranslationGraph(Graph):
                 return []
 
     def extract_path_(self, from_node: Word, to_node: Word, candidates: List[Word], chunk: Chunk, k: int = None,
-                     max_length=None, min_length=None) -> List[Path]:
+                      max_length=None, min_length=None) -> List[Path]:
         max_length = max_length if max_length is not None else 10
         # first_candidates = Path.get_candidates(candidates, from_node, toward=True)
         # last_candidates = Path.get_candidates(candidates, to_node, toward=False)
@@ -1873,7 +1891,8 @@ class TranslationGraph(Graph):
                 candidate_mapping[candidate.id]["score"].append(score)
 
         for candidate_id in candidate_mapping:
-            candidate_mapping[candidate_id]["score"] = sum(candidate_mapping[candidate_id]["score"]) / len(candidate_sets)
+            candidate_mapping[candidate_id]["score"] = sum(candidate_mapping[candidate_id]["score"]) / len(
+                candidate_sets)
 
         candidates = [candidate_mapping[candidate_id]["item"] for candidate_id in candidate_mapping]
 
@@ -1944,7 +1963,8 @@ class TranslationGraph(Graph):
 
             return None
 
-        def get_next_word(from_node: SentCombineWord, end_node: SentCombineWord, candidates: [List[SentCombineWord]], path=None):
+        def get_next_word(from_node: SentCombineWord, end_node: SentCombineWord, candidates: [List[SentCombineWord]],
+                          path=None):
             if path is None:
                 path = [from_node]
             # print("LAST ", path[-1].last_syllable.text, " END ", end_node.first_syllable.text, [c.text for c in candidates])
@@ -1958,7 +1978,8 @@ class TranslationGraph(Graph):
                 # print(path[-1].last_syllable.text, c.first_syllable.text, path[-1].last_syllable.has_next_word(c.first_syllable))
                 if path[-1].last_syllable.has_next_word(c.first_syllable):
                     child_path = [*path, c]
-                    all_paths += get_next_word(from_node, end_node, [item for item in candidates if item != c], path=child_path)
+                    all_paths += get_next_word(from_node, end_node, [item for item in candidates if item != c],
+                                               path=child_path)
             return [all_paths]
 
         _pre_is_ner = is_ner_group(start_words)
@@ -2019,4 +2040,3 @@ class TranslationGraph(Graph):
                 paths = [item[1:] for item in paths]
                 output = paths
         return output
-
