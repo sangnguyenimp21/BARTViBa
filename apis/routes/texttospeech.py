@@ -13,6 +13,7 @@ import nltk
 
 MAX_THREADS = 4
 
+threads_dict = {}
 
 class SpeakRoute(BaseRoute):
     def __init__(self):
@@ -58,20 +59,60 @@ class SpeakRoute(BaseRoute):
 
         audio_data = base64.b64encode(wav_bytes).decode('UTF-8')
         return audio_data
+    
+    def wrapper_function(self, data: DataSpeech, generator, dct, threads_dict):
+        # Dictionary containing generator and dct tuples for each gender
+        input = self.partition_input(data.text)
+        #print(input)
 
-    def translate_func(self, data: DataSpeech):
-        processed_text = self.partition_input(data.text)
-        print(processed_text)
+        for input in input:
+            # Create a thread for each input
+            thread = threading.Thread(target=self.translate_func, args=(data, input, generator, dct))
+            thread.start()
+            
+            # Add the thread to the dictionary
+            threads_dict[thread.name] = thread
+
+            thread.join()
+
+        # wait for all threads to finish
+        # for thread in threads_dict.items():
+        #     print(thread)
+        #     thread.join()
+
+
+        # return the output of the threads
+        # print(threads_dict)
+        return threads_dict
+
+
+    # need to create all 4 threads and wait for them to finish
+    def translate_func(self, data: DataSpeech, input, generator, dct):
+        input_text = input[0]
 
         if data.gender:
             gender = data.gender
         else:
             gender = "both"
 
+        # generate_wav_file should take a wav file as argument
         # process input_text into 4 chunks (multithreading)
-        output_data = self.process_audio(processed_text, gender)
+        if gender == "male":
+            y = infer(input_text, generator, dct)
+        elif gender == "female":
+            y = infer(input_text, generator_fm, dct_fm)
+        else:
+            y = infer(input_text, generator, dct)
+            y_fm = infer(input_text, generator_fm, dct_fm)
 
-        return output_data
+        audio_data = self.make_audio(y)
+
+        if gender == "both":
+            audio_data_fm = self.make_audio(y_fm)
+            return OutDataSpeech(speech=audio_data, speech_fm=audio_data_fm)
+
+        return OutDataSpeech(speech=audio_data)
+
 
     def create_routes(self):
         router = self.router
@@ -79,23 +120,6 @@ class SpeakRoute(BaseRoute):
         @router.post("/vi_ba")
         async def translate(data: DataSpeech):
             # self.partition_input(data.text)
-            return await self.wait(self.translate_func, data)
-
-    def process_audio(self, processed_text, gender):
-        threads_m = []
-        threads_fm = []
-
-        results = []
-
-        if gender == "male":
+            return await self.wait(self.wrapper_function, data, generator, dct, threads_dict)
             
-
-        elif gender == "female":
-            
-        else:
-            
-
-        if gender == "both":
-            
-        else:
             
