@@ -6,18 +6,31 @@ import io
 from scipy.io.wavfile import write
 import base64
 import torch
+import numpy as np
 
 import threading
-import concurrent.futures
 import nltk
 
 MAX_THREADS = 4
 
 threads_dict = {}
 
+
 class SpeakRoute(BaseRoute):
     def __init__(self):
         super(SpeakRoute, self).__init__(prefix="/speak")
+
+    def take_thread_value(self, threads_dict):
+        # Concatenate the audio files from each thread
+        concatenated_values = []
+        for value in threads_dict.values():
+            concatenated_values.extend(value)
+
+
+        # Create the OutDataSpeech object for the final audio file
+        out_data = OutDataSpeech(speech=concatenated_values)
+
+        return out_data
 
     # improvement: use a thread pool to process the input text
     # partition the input text into 4 chunks and process them in parallel
@@ -59,62 +72,80 @@ class SpeakRoute(BaseRoute):
 
         audio_data = base64.b64encode(wav_bytes).decode('UTF-8')
         return audio_data
-    
+
     def wrapper_function(self, data: DataSpeech, generator, dct, threads_dict):
         # Dictionary containing generator and dct tuples for each gender
-        input = self.partition_input(data.text)
-        #print(input)
+        inputs = self.partition_input(data.text)
+        # print(input)
+        threads = []
 
-        for input in input:
+        for input in inputs:
             # Create a thread for each input
-            thread = threading.Thread(target=self.translate_func, args=(data, input, generator, dct))
-            thread.start()
+            index = 0
+            thread = threading.Thread(target=self.translate_func, args=(
+                data, input, generator, dct, threads_dict, index))
             
+            threads.append(thread)
+            index += 1
+
             # Add the thread to the dictionary
-            threads_dict[thread.name] = thread
 
-            thread.join()
-
-            print("Thread {} finished".format(thread.name))
+            # 1 - Thread <OutDataSpeech> <Thread1> ---> [A,B]
+            # 2 - Thread <OutDataSpeech> <Thread2> ---> [A,B]
+            # 3 - Thread <OutDataSpeech> <Thread3> ---> [A,B]
+            # 4 - Thread <OutDataSpeech> <Thread4> ---> [A,B]
+            # want to know thread's audio file
 
         # wait for all threads to finish
         # for thread in threads_dict.items():
         #     print(thread)
         #     thread.join()
+        # Start all threads
+        for thread in threads:
+            thread.start()
 
+        # Wait for all threads to finish
+        for thread in threads:
+            # inform finished threads
+            print("Thread " + thread.name + " finished")
+            thread.join()
 
         # return the output of the threads
-        print(threads_dict)
-        return threads_dict
-
+        res = self.take_thread_value(threads_dict)
+        return res
 
     # need to create all 4 threads and wait for them to finish
-    def translate_func(self, data: DataSpeech, input, generator, dct):
-        input_text = input[0]
 
-        if data.gender:
-            gender = data.gender
-        else:
-            gender = "both"
+    def translate_func(self, data: DataSpeech, input, generator, dct, threads_dict, index):
+        input_text = input
+        print(input_text)
 
-        # generate_wav_file should take a wav file as argument
-        # process input_text into 4 chunks (multithreading)
-        if gender == "male":
-            y = infer(input_text, generator, dct)
-        elif gender == "female":
-            y = infer(input_text, generator_fm, dct_fm)
-        else:
-            y = infer(input_text, generator, dct)
-            y_fm = infer(input_text, generator_fm, dct_fm)
+        for input in input_text:
+            # rint(input)
+            if data.gender:
+                gender = data.gender
+            else:
+                gender = "both"
 
-        audio_data = self.make_audio(y)
+            # generate_wav_file should take a wav file as argument
+            # process input_text into 4 chunks (multithreading)
+            if gender == "male":
+                y = infer(input, generator, dct)
+            elif gender == "female":
+                y = infer(input, generator_fm, dct_fm)
+            else:
+                y = infer(input, generator, dct)
+                y_fm = infer(input, generator_fm, dct_fm)
 
-        if gender == "both":
-            audio_data_fm = self.make_audio(y_fm)
-            return OutDataSpeech(speech=audio_data, speech_fm=audio_data_fm)
+            audio_data = self.make_audio(y)
 
-        return OutDataSpeech(speech=audio_data)
+            if gender == "both":
+                audio_data_fm = self.make_audio(y_fm)
+                threads_dict[index] = OutDataSpeech(
+                    speech=audio_data, speech_fm=audio_data_fm)
 
+            else:
+                threads_dict[index] = OutDataSpeech(speech=audio_data)
 
     def create_routes(self):
         router = self.router
@@ -123,5 +154,3 @@ class SpeakRoute(BaseRoute):
         async def translate(data: DataSpeech):
             # self.partition_input(data.text)
             return await self.wait(self.wrapper_function, data, generator, dct, threads_dict)
-            
-            
