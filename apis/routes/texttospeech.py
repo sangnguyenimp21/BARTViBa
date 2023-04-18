@@ -75,6 +75,8 @@ class SpeakRoute(BaseRoute):
 
             thread.join()
 
+            print("Thread {} finished".format(thread.name))
+
         # wait for all threads to finish
         # for thread in threads_dict.items():
         #     print(thread)
@@ -82,7 +84,7 @@ class SpeakRoute(BaseRoute):
 
 
         # return the output of the threads
-        # print(threads_dict)
+        print(threads_dict)
         return threads_dict
 
 
