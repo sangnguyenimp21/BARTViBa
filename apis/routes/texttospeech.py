@@ -13,7 +13,7 @@ import nltk
 
 MAX_THREADS = 4
 
-threads_dict = {}
+threads_dict = [[] for _ in range(MAX_THREADS)]
 
 
 class SpeakRoute(BaseRoute):
@@ -23,12 +23,14 @@ class SpeakRoute(BaseRoute):
     def take_thread_value(self, threads_dict):
         # Concatenate the audio files from each thread
         concatenated_values = []
-        for value in threads_dict.values():
+        for value in threads_dict:
+            print(f'Len: {len(value)}')
             concatenated_values.extend(value)
 
 
         # Create the OutDataSpeech object for the final audio file
         out_data = OutDataSpeech(speech=concatenated_values)
+
 
         return out_data
 
@@ -36,7 +38,7 @@ class SpeakRoute(BaseRoute):
     # partition the input text into 4 chunks and process them in parallel
     def partition_input(self, input_text):
         # Split the input text into sentences using the nltk library
-        # nltk.download('punkt')
+        nltk.download('punkt')
         sentences = nltk.sent_tokenize(input_text)
         num_sentences = len(sentences)
         print(num_sentences)
@@ -79,14 +81,12 @@ class SpeakRoute(BaseRoute):
         # print(input)
         threads = []
 
-        for input in inputs:
+        for index, input in enumerate(inputs):
             # Create a thread for each input
-            index = 0
             thread = threading.Thread(target=self.translate_func, args=(
                 data, input, generator, dct, threads_dict, index))
             
             threads.append(thread)
-            index += 1
 
             # Add the thread to the dictionary
 
@@ -120,7 +120,7 @@ class SpeakRoute(BaseRoute):
         input_text = input
         print(input_text)
 
-        for input in input_text:
+        for i, input in enumerate(input_text):
             # rint(input)
             if data.gender:
                 gender = data.gender
@@ -141,11 +141,19 @@ class SpeakRoute(BaseRoute):
 
             if gender == "both":
                 audio_data_fm = self.make_audio(y_fm)
-                threads_dict[index] = OutDataSpeech(
-                    speech=audio_data, speech_fm=audio_data_fm)
-
+                if i == 0:
+                    threads_dict[index] = [
+                        OutDataSpeech(speech=audio_data, speech_fm=audio_data_fm)
+                    ]
+                else:
+                    threads_dict[index].append(OutDataSpeech(
+                        speech=audio_data, speech_fm=audio_data_fm)
+                    )
             else:
-                threads_dict[index] = OutDataSpeech(speech=audio_data)
+                if i == 0:
+                    threads_dict[index] = [OutDataSpeech(speech=audio_data)]
+                else:
+                    threads_dict[index].append(OutDataSpeech(speech=audio_data))
 
     def create_routes(self):
         router = self.router
