@@ -10,15 +10,39 @@ import numpy as np
 
 import threading
 import nltk
+import queue
+
 
 MAX_THREADS = 4
 
 threads_dict = [[] for _ in range(MAX_THREADS)]
 
+class CustomThread(threading.Thread):
+    def __init__(self, target=None, args=(), kwargs=None, priority=0):
+        super().__init__(target=target, args=args, kwargs=kwargs)
+        self.priority = priority
 
+    def __lt__(self, other):
+        return self.priority < other.priority
+    
 class SpeakRoute(BaseRoute):
     def __init__(self):
         super(SpeakRoute, self).__init__(prefix="/speak")
+
+    def join_threads_by_priority(self, threads):
+        # Create a priority queue to store the threads
+        q = queue.PriorityQueue()
+
+        # Add the threads to the priority queue
+        for thread in threads:
+            q.put((thread.priority, thread))
+
+        # Join the threads in order of their priorities
+        while not q.empty():
+            priority, thread = q.get()
+
+            print("Thread " + thread.name + " finished")
+            thread.join()
 
     def take_thread_value(self, threads_dict):
         # Concatenate the audio files from each thread
@@ -27,10 +51,12 @@ class SpeakRoute(BaseRoute):
             print(f'Len: {len(value)}')
             concatenated_values.extend(value)
 
+        with open('output.txt', 'w') as f:
+            for value in concatenated_values:
+                f.write(f'{value}\n')
 
         # Create the OutDataSpeech object for the final audio file
         out_data = OutDataSpeech(speech=concatenated_values)
-
 
         return out_data
 
@@ -80,13 +106,17 @@ class SpeakRoute(BaseRoute):
         inputs = self.partition_input(data.text)
         # print(input)
         threads = []
+        prio = 0
 
         for index, input in enumerate(inputs):
             # Create a thread for each input
-            thread = threading.Thread(target=self.translate_func, args=(
-                data, input, generator, dct, threads_dict, index))
+            thread = CustomThread(target=self.translate_func, args=(
+                data, input, generator, dct, threads_dict, index),
+                priority=prio
+            )
             
             threads.append(thread)
+            prio += 1
 
             # Add the thread to the dictionary
 
@@ -102,13 +132,16 @@ class SpeakRoute(BaseRoute):
         #     thread.join()
         # Start all threads
         for thread in threads:
+            thread.name = thread.name + " " + str(thread.priority)
             thread.start()
 
         # Wait for all threads to finish
-        for thread in threads:
-            # inform finished threads
-            print("Thread " + thread.name + " finished")
-            thread.join()
+        # for thread in threads:
+        #     # inform finished threads
+        #     print("Thread " + thread.name + " finished")
+        #     thread.join()
+
+        self.join_threads_by_priority(threads)
 
         # return the output of the threads
         res = self.take_thread_value(threads_dict)
