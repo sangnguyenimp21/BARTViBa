@@ -11,13 +11,17 @@ import nltk
 import queue
 from pydub import AudioSegment
 import datetime
+import os
 
 MAX_THREADS = 4
 
 SPEECH_DATA = dict()
 
+SERVER_URL = "http://localhost:8080"
+USER = "/Users/khangnguyen/lab"
 
-
+def current_datetime():
+    return datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 class CustomThread(threading.Thread):
     def __init__(self, target=None, args=(), kwargs=None, priority=0):
@@ -28,7 +32,7 @@ class CustomThread(threading.Thread):
         return self.priority < other.priority
 
 class SpeakRoute(BaseRoute):
-    MP3_SIGNATURE = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    MP3_SIGNATURE = current_datetime()
     def __init__(self):
         super(SpeakRoute, self).__init__(prefix="/speak")
 
@@ -54,17 +58,11 @@ class SpeakRoute(BaseRoute):
 
     def take_thread_value(self, SPEECH_DATA, priority):
 
-        # TEMPORARY:
-        if not priority in SPEECH_DATA:
-            SPEECH_DATA[priority] = []
-        # TEMPORARY:
-
         for out_speech in SPEECH_DATA[priority]:
             self.decode_audio(out_speech.speech, priority)
-            priority += 1
         # Construct and return the URL of the generated mp3 file
         mp3_filename = f"{self.MP3_SIGNATURE}+{priority}.mp3"
-        mp3_url = f"http://localhost:8080/to-speech/{mp3_filename}"
+        mp3_url = f"{SERVER_URL}/to-speech/{mp3_filename}"
         return mp3_url
 
     # improvement: use a thread pool to process the input text
@@ -93,7 +91,7 @@ class SpeakRoute(BaseRoute):
             start = end
 
         # print(partitioned)
-        return partitioned
+        return [e for e in partitioned if e]
 
     def make_audio(self, y):
         with torch.no_grad():
@@ -117,12 +115,12 @@ class SpeakRoute(BaseRoute):
 
         mp3_bytes = mp3_audio.getvalue()
 
-        with open(f"/Users/khangnguyen/to-speech/{self.MP3_SIGNATURE}+{priority}.mp3", "wb") as f:
+        with open(f"{USER}/BARTViBa/to-speech/{self.MP3_SIGNATURE}+{priority}.mp3", "ab") as f:
             f.write(mp3_bytes)
 
     def translate_func(self, data: DataSpeech, input, generator, dct, SPEECH_DATA, index):
         input_text = input
-        print(input_text)
+        print("it: ", input_text)
 
         for i, input in enumerate(input_text):
             # rint(input)
@@ -165,7 +163,7 @@ class SpeakRoute(BaseRoute):
     def wrapper_function(self, data: DataSpeech, generator, dct, SPEECH_DATA):
         # Dictionary containing generator and dct tuples for each gender
         inputs = self.partition_input(data.text)
-        # print(input)
+        print("wf: ", inputs)
         threads = []
         prio = 0
 
@@ -193,6 +191,7 @@ class SpeakRoute(BaseRoute):
             thread.start()
 
         urls = self.join_threads_by_priority(threads)
+        self.MP3_SIGNATURE = current_datetime()
         return urls
 
     def create_routes(self):
