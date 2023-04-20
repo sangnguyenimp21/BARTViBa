@@ -6,16 +6,18 @@ import io
 from scipy.io.wavfile import write
 import base64
 import torch
-import numpy as np
-
 import threading
 import nltk
 import queue
-
+from pydub import AudioSegment
+import datetime
 
 MAX_THREADS = 4
 
-threads_dict = [[] for _ in range(MAX_THREADS)]
+SPEECH_DATA = dict()
+
+
+
 
 class CustomThread(threading.Thread):
     def __init__(self, target=None, args=(), kwargs=None, priority=0):
@@ -24,8 +26,9 @@ class CustomThread(threading.Thread):
 
     def __lt__(self, other):
         return self.priority < other.priority
-    
+
 class SpeakRoute(BaseRoute):
+    MP3_SIGNATURE = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     def __init__(self):
         super(SpeakRoute, self).__init__(prefix="/speak")
 
@@ -37,28 +40,32 @@ class SpeakRoute(BaseRoute):
         for thread in threads:
             q.put((thread.priority, thread))
 
+        urls = list()
         # Join the threads in order of their priorities
         while not q.empty():
             priority, thread = q.get()
 
             print("Thread " + thread.name + " finished")
             thread.join()
+            # return the output of the threads
+            url = self.take_thread_value(SPEECH_DATA, priority)
+            urls.append(url)
+        return urls
 
-    def take_thread_value(self, threads_dict):
-        # Concatenate the audio files from each thread
-        concatenated_values = []
-        for value in threads_dict:
-            print(f'Len: {len(value)}')
-            concatenated_values.extend(value)
+    def take_thread_value(self, SPEECH_DATA, priority):
 
-        with open('output.txt', 'w') as f:
-            for value in concatenated_values:
-                f.write(f'{value}\n')
+        # TEMPORARY:
+        if not priority in SPEECH_DATA:
+            SPEECH_DATA[priority] = []
+        # TEMPORARY:
 
-        # Create the OutDataSpeech object for the final audio file
-        out_data = OutDataSpeech(speech=concatenated_values)
-
-        return out_data
+        for out_speech in SPEECH_DATA[priority]:
+            self.decode_audio(out_speech.speech, priority)
+            priority += 1
+        # Construct and return the URL of the generated mp3 file
+        mp3_filename = f"{self.MP3_SIGNATURE}+{priority}.mp3"
+        mp3_url = f"http://localhost:8080/to-speech/{mp3_filename}"
+        return mp3_url
 
     # improvement: use a thread pool to process the input text
     # partition the input text into 4 chunks and process them in parallel
@@ -97,59 +104,23 @@ class SpeakRoute(BaseRoute):
         byte_io = io.BytesIO(bytes_wav)
         write(byte_io, output_sampling_rate, audio)
         wav_bytes = byte_io.read()
-
         audio_data = base64.b64encode(wav_bytes).decode('UTF-8')
         return audio_data
 
-    def wrapper_function(self, data: DataSpeech, generator, dct, threads_dict):
-        # Dictionary containing generator and dct tuples for each gender
-        inputs = self.partition_input(data.text)
-        # print(input)
-        threads = []
-        prio = 0
+    def decode_audio(self, audio_data, priority):
+        # Decode the base64-encoded string to bytes
+        wav_bytes = base64.b64decode(audio_data.encode('utf-8'))
 
-        for index, input in enumerate(inputs):
-            # Create a thread for each input
-            thread = CustomThread(target=self.translate_func, args=(
-                data, input, generator, dct, threads_dict, index),
-                priority=prio
-            )
-            
-            threads.append(thread)
-            prio += 1
+        wav_audio = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
+        mp3_audio = io.BytesIO()
+        wav_audio.export(mp3_audio, format="mp3")
 
-            # Add the thread to the dictionary
+        mp3_bytes = mp3_audio.getvalue()
 
-            # 1 - Thread <OutDataSpeech> <Thread1> ---> [A,B]
-            # 2 - Thread <OutDataSpeech> <Thread2> ---> [A,B]
-            # 3 - Thread <OutDataSpeech> <Thread3> ---> [A,B]
-            # 4 - Thread <OutDataSpeech> <Thread4> ---> [A,B]
-            # want to know thread's audio file
+        with open(f"/Users/khangnguyen/to-speech/{self.MP3_SIGNATURE}+{priority}.mp3", "wb") as f:
+            f.write(mp3_bytes)
 
-        # wait for all threads to finish
-        # for thread in threads_dict.items():
-        #     print(thread)
-        #     thread.join()
-        # Start all threads
-        for thread in threads:
-            thread.name = thread.name + " " + str(thread.priority)
-            thread.start()
-
-        # Wait for all threads to finish
-        # for thread in threads:
-        #     # inform finished threads
-        #     print("Thread " + thread.name + " finished")
-        #     thread.join()
-
-        self.join_threads_by_priority(threads)
-
-        # return the output of the threads
-        res = self.take_thread_value(threads_dict)
-        return res
-
-    # need to create all 4 threads and wait for them to finish
-
-    def translate_func(self, data: DataSpeech, input, generator, dct, threads_dict, index):
+    def translate_func(self, data: DataSpeech, input, generator, dct, SPEECH_DATA, index):
         input_text = input
         print(input_text)
 
@@ -175,23 +146,58 @@ class SpeakRoute(BaseRoute):
             if gender == "both":
                 audio_data_fm = self.make_audio(y_fm)
                 if i == 0:
-                    threads_dict[index] = [
+                    SPEECH_DATA[index] = [
                         OutDataSpeech(speech=audio_data, speech_fm=audio_data_fm)
                     ]
                 else:
-                    threads_dict[index].append(OutDataSpeech(
-                        speech=audio_data, speech_fm=audio_data_fm)
+                    SPEECH_DATA[index].append(
+                        OutDataSpeech(speech=audio_data, speech_fm=audio_data_fm)
                     )
             else:
                 if i == 0:
-                    threads_dict[index] = [OutDataSpeech(speech=audio_data)]
+                    SPEECH_DATA[index] = [OutDataSpeech(speech=audio_data)]
                 else:
-                    threads_dict[index].append(OutDataSpeech(speech=audio_data))
+                    SPEECH_DATA[index].append(OutDataSpeech(speech=audio_data))
+
+
+
+    # need to create all 4 threads and wait for them to finish
+    def wrapper_function(self, data: DataSpeech, generator, dct, SPEECH_DATA):
+        # Dictionary containing generator and dct tuples for each gender
+        inputs = self.partition_input(data.text)
+        # print(input)
+        threads = []
+        prio = 0
+
+        for index, input in enumerate(inputs):
+            # Create a thread for each input
+            thread = CustomThread(target=self.translate_func, args=(
+                data, input, generator, dct, SPEECH_DATA, index),
+                                  priority=prio
+                                  )
+
+            threads.append(thread)
+            prio += 1
+
+            # Add the thread to the dictionary
+
+            # 1 - Thread <OutDataSpeech> <Thread1> ---> [A,B]
+            # 2 - Thread <OutDataSpeech> <Thread2> ---> [A,B]
+            # 3 - Thread <OutDataSpeech> <Thread3> ---> [A,B]
+            # 4 - Thread <OutDataSpeech> <Thread4> ---> [A,B]
+            # want to know thread's audio file
+
+        # Start all threads
+        for thread in threads:
+            thread.name = thread.name + " " + str(thread.priority)
+            thread.start()
+
+        urls = self.join_threads_by_priority(threads)
+        return urls
 
     def create_routes(self):
         router = self.router
 
         @router.post("/vi_ba")
         async def translate(data: DataSpeech):
-            # self.partition_input(data.text)
-            return await self.wait(self.wrapper_function, data, generator, dct, threads_dict)
+            return await self.wait(self.wrapper_function, data, generator, dct, SPEECH_DATA)
