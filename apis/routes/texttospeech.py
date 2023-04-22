@@ -1,4 +1,5 @@
 import os
+from fastapi import Response
 from GraphTranslation.apis.routes.base_route import BaseRoute
 import json
 from objects.data import DataSpeech, OutDataSpeech
@@ -18,10 +19,8 @@ MAX_THREADS = 4
 
 SPEECH_DATA = dict()
 
-# SERVER_URL = "https://bahnar.dscilab.site:20007"
-SERVER_URL = "http://localhost:8080"
-USER = "/Users/khangnguyen/lab"
-
+SERVER_URL = "https://bahnar.dscilab.site:20007"
+# SERVER_URL = "http://localhost:8080"
 def current_datetime():
     return datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
@@ -57,6 +56,7 @@ class SpeakRoute(BaseRoute):
             self.take_thread_value(SPEECH_DATA, priority)
 
     def take_thread_value(self, SPEECH_DATA, priority):
+        print(f'Take Thread {priority}\'s value')
         self.decode_audio(SPEECH_DATA[priority].speech, self.FILE_NUMBER)
 
     # improvement: use a thread pool to process the input text
@@ -102,7 +102,7 @@ class SpeakRoute(BaseRoute):
 
         mp3_bytes = mp3_audio.getvalue()
 
-        with open(f"{USER}/BARTViBa/to-speech/temp_{self.MP3_SIGNATURE}+{file_num}.mp3", "ab") as f:
+        with open(os.path.abspath(f"to-speech/temp_{self.MP3_SIGNATURE}+{file_num}.mp3"), "ab") as f:
             f.write(mp3_bytes)
 
     def translate_func(self, data: DataSpeech, input, generator, dct, SPEECH_DATA, index):
@@ -146,6 +146,8 @@ class SpeakRoute(BaseRoute):
     def process_inputs(self, data: DataSpeech, generator, dct, SPEECH_DATA):
         inputs = self.partition_input(data.text)
         threads = []
+        print("Number of jobs: ", len(inputs))
+        print("Batches: ", inputs)
 
         for index, job in enumerate(inputs):
             """
@@ -153,6 +155,7 @@ class SpeakRoute(BaseRoute):
              job: batch of 4 sentences
             """
             for prio, input in enumerate(job):
+                print("prio ", prio, "input ", input)
                 # Create a thread for each input
                 thread = CustomThread(target=self.translate_func, args=(
                     data, input, generator, dct, SPEECH_DATA, prio), priority=prio)
@@ -164,19 +167,29 @@ class SpeakRoute(BaseRoute):
 
             self.FILE_NUMBER = index
             self.join_threads_by_priority(threads)
-            temp_file = f"{USER}/BARTViBa/to-speech/temp_{self.MP3_SIGNATURE}+{self.FILE_NUMBER}.mp3"
+            temp_file = os.path.abspath(f"to-speech/temp_{self.MP3_SIGNATURE}+{self.FILE_NUMBER}.mp3")
             standard_file = temp_file.replace("temp_", "", 1)
             os.rename(temp_file, standard_file)
             threads = []
 
-        self.MP3_SIGNATURE = current_datetime()
 
     def create_routes(self):
         router = self.router
 
         @router.post("/vi_ba")
-        async def translate(data: DataSpeech):
+        async def translate(data: DataSpeech, response: Response):
             thread = threading.Thread(target=self.process_inputs, args=(data, generator, dct, SPEECH_DATA))
             thread.start()
             urls_result = await self.generate_urls(data)
+
+            # Set the Cache-Control header
+            response.headers['Cache-Control'] = 'max-age=60'
             return urls_result
+
+        @router.delete("/vi_ba")
+        def delete_server_cache():
+            for root, dirs, files, in os.walk(os.path.abspath("to-speech")):
+                for file_name in files:
+                    if self.MP3_SIGNATURE in file_name:
+                        os.remove(os.path.abspath((f"to-speech/{file_name}")))
+            self.MP3_SIGNATURE = current_datetime()
