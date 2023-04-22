@@ -1,5 +1,6 @@
+import os
 from GraphTranslation.apis.routes.base_route import BaseRoute
-
+import json
 from objects.data import DataSpeech, OutDataSpeech
 from TTS.main import generator, dct, generator_fm, dct_fm, hifigan, infer, output_sampling_rate
 import io
@@ -51,13 +52,11 @@ class SpeakRoute(BaseRoute):
         while not q.empty():
             priority, thread = q.get()
 
-            # print("Thread " + thread.name + " finished")
             thread.join()
             # return the output of the threads
             self.take_thread_value(SPEECH_DATA, priority)
 
     def take_thread_value(self, SPEECH_DATA, priority):
-        print("take thread value's prio is ", priority)
         self.decode_audio(SPEECH_DATA[priority].speech, self.FILE_NUMBER)
 
     # improvement: use a thread pool to process the input text
@@ -70,12 +69,10 @@ class SpeakRoute(BaseRoute):
         # Split the input text into sentences using the nltk library
         nltk.download('punkt')
         sentences = nltk.sent_tokenize(input_text)
-        print("sentences: ", sentences)
         num_sentences = len(sentences)
 
         # Determine the chunk size based on the number of sentences
         num_jobs = math.ceil( num_sentences / MAX_THREADS )
-        print("num_jobs: ", num_jobs)
         jobs = []
         for i in range(num_jobs):
             start = i*4
@@ -105,12 +102,11 @@ class SpeakRoute(BaseRoute):
 
         mp3_bytes = mp3_audio.getvalue()
 
-        with open(f"{USER}/BARTViBa/to-speech/{self.MP3_SIGNATURE}+{file_num}.mp3", "ab") as f:
+        with open(f"{USER}/BARTViBa/to-speech/temp_{self.MP3_SIGNATURE}+{file_num}.mp3", "ab") as f:
             f.write(mp3_bytes)
 
     def translate_func(self, data: DataSpeech, input, generator, dct, SPEECH_DATA, index):
         input_text = input
-        print("it: ", input_text)
 
         if data.gender:
             gender = data.gender
@@ -137,18 +133,18 @@ class SpeakRoute(BaseRoute):
         SPEECH_DATA[index] = OutDataSpeech(speech=audio_data)
 
 
-    # need to create all 4 threads and wait for them to finish
-    def wrapper_function(self, data: DataSpeech, generator, dct, SPEECH_DATA):
-        # Dictionary containing generator and dct tuples for each gender
+    async def generate_urls(self, data: DataSpeech):
         inputs = self.partition_input(data.text)
-        print("wf: ", inputs)
-        num_jobs = len(inputs)
         urls = list()
+        num_jobs = len(inputs)
         for i in range(num_jobs):
             mp3_filename = f"{self.MP3_SIGNATURE}+{i}.mp3"
             mp3_url = f"{SERVER_URL}/to-speech/{mp3_filename}"
             urls.append(mp3_url)
-        print(urls) # asynch this shiz
+        return json.dumps({'urls': urls}).encode('utf-8')
+
+    def process_inputs(self, data: DataSpeech, generator, dct, SPEECH_DATA):
+        inputs = self.partition_input(data.text)
         threads = []
 
         for index, job in enumerate(inputs):
@@ -157,7 +153,6 @@ class SpeakRoute(BaseRoute):
              job: batch of 4 sentences
             """
             for prio, input in enumerate(job):
-                print("prio ", prio, "input ", input)
                 # Create a thread for each input
                 thread = CustomThread(target=self.translate_func, args=(
                     data, input, generator, dct, SPEECH_DATA, prio), priority=prio)
@@ -169,15 +164,19 @@ class SpeakRoute(BaseRoute):
 
             self.FILE_NUMBER = index
             self.join_threads_by_priority(threads)
+            temp_file = f"{USER}/BARTViBa/to-speech/temp_{self.MP3_SIGNATURE}+{self.FILE_NUMBER}.mp3"
+            standard_file = temp_file.replace("temp_", "", 1)
+            os.rename(temp_file, standard_file)
             threads = []
 
-
         self.MP3_SIGNATURE = current_datetime()
-        return urls
 
     def create_routes(self):
         router = self.router
 
         @router.post("/vi_ba")
         async def translate(data: DataSpeech):
-            return await self.wait(self.wrapper_function, data, generator, dct, SPEECH_DATA)
+            thread = threading.Thread(target=self.process_inputs, args=(data, generator, dct, SPEECH_DATA))
+            thread.start()
+            urls_result = await self.generate_urls(data)
+            return urls_result
