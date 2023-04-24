@@ -8,3 +8,4 @@ logs
 checkpoint
 data/cache
 .ipynb_checkpoints
+.DS_Store

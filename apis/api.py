@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 
+from fastapi.staticfiles import StaticFiles
+import os
+
 from apis.routes.graph_translate import GraphTranslateRoute
 from apis.routes.translation import TranslateRoute
 from apis.routes.texttospeech import SpeakRoute
@@ -16,7 +19,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/to-speech", StaticFiles(directory=os.path.abspath("to-speech")), name="to-speech")
 
-# app.include_router(GraphTranslateRoute().router)
+app.include_router(GraphTranslateRoute().router)
 app.include_router(TranslateRoute().router)
 app.include_router(SpeakRoute().router)
