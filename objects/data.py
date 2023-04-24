@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 class Data(BaseModel):
@@ -21,6 +21,12 @@ class OutData(BaseModel):
         self.src = src
         self.tgt = tgt
         
+class DataSpeechDelete(BaseModel):
+    urls: List[str]
+
+    def __init__(self, urls: List[str]):
+        super(DataSpeechDelete, self).__init__(urls=urls)
+        self.urls = urls
         
 class DataSpeech(BaseModel):
     text: str
