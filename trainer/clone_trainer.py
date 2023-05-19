@@ -43,21 +43,23 @@ def get_metric(metric_, tokenizer_):
 
 
 def main():
-    WORD_DROPOUT_RATIO = 0
-    WORD_REPLACEMENT_RATIO = 0
+    WORD_DROPOUT_RATIO = 0.15
+    WORD_REPLACEMENT_RATIO = 0.15
     model_checkpoint = "pretrained/bartpho_syllable"
     metric = load_metric("sacrebleu")
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
     model = CustomMbartModel.from_pretrained(model_checkpoint)
     model.resize_token_embeddings(len(tokenizer.get_vocab()))
     model.set_augment_config(word_dropout_ratio=WORD_DROPOUT_RATIO,
-                             word_replacement_ratio=WORD_REPLACEMENT_RATIO)
+                             word_replacement_ratio=WORD_REPLACEMENT_RATIO,
+                             da_method='switchout')
     compute_metric_func = get_metric(metric, tokenizer)
 
     train_dataset, valid_dataset, test_dataset = ViBaDataset.get_datasets(data_folder="data/new_all",
                                                                           tokenizer_path=model_checkpoint)
 
-    batch_size = 4
+    batch_size = 16
+    num_train_epochs = 1
 
     data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
 
@@ -70,7 +72,7 @@ def main():
         per_device_eval_batch_size=batch_size,
         weight_decay=0.01,
         save_total_limit=3,
-        num_train_epochs=1,
+        num_train_epochs=num_train_epochs,
         predict_with_generate=False,
         fp16=False,
         push_to_hub=False,
@@ -94,7 +96,7 @@ def main():
     trainer.train()
 
     # print(trainer.evaluate(test_dataset, num_beams=5, max_length=512))
-    trainer.save_model("checkpoint/switchout_conversation_updated_conversation_102")
+    trainer.save_model("checkpoint/switchout_updated_conversation_102")
 
 
 if __name__ == "__main__":

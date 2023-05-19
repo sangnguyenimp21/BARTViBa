@@ -108,6 +108,7 @@ def create_forward(self):
 class CustomMbartModel(MBartForConditionalGeneration, ABC):
     def __init__(self, config: MBartConfig):
         super(CustomMbartModel, self).__init__(config=config)
+        self.da_method = None
         self.word_dropout_ratio = None
         self.word_replacement_ratio = None
         self.pad_id = config.pad_token_id
@@ -115,7 +116,8 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
         self.eos_id = config.eos_token_id
         # self.model.forward = create_forward(self.model)
 
-    def set_augment_config(self, word_dropout_ratio: float = 0, word_replacement_ratio: float = 0):
+    def set_augment_config(self, word_dropout_ratio: float = 0, word_replacement_ratio: float = 0, da_method = None):
+        self.da_method = da_method
         self.word_dropout_ratio = word_dropout_ratio
         self.word_replacement_ratio = word_replacement_ratio
 
@@ -189,6 +191,7 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
 
         corrupt_pos = num_words.data.float().div_(lengths).unsqueeze(1).expand_as(sents).contiguous().masked_fill_(mask, 0)
 
+        corrupt_pos = corrupt_pos.clamp(min=0, max=1)
         corrupt_pos = torch.bernoulli(corrupt_pos, out=corrupt_pos).byte()
         total_words = int(corrupt_pos.sum())
 
@@ -197,7 +200,7 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
         corrupt_val = corrupt_val.random_(1, vocab_size)
         corrupts = torch.zeros(batch_size, n_steps).long()
         corrupts = corrupts.masked_scatter_(corrupt_pos, corrupt_val)
-        corrupts = corrupts.cuda()
+        # corrupts = corrupts.cuda()
         sampled_sents = sents.add(Variable(corrupts)).remainder_(vocab_size)
 
         # converting sampled_sents into Variable before returning
@@ -242,10 +245,17 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            # input_ids = self.word_replacement(input_ids)
-            # decoder_input_ids = self.word_replacement(labels)
-            input_ids = self.switch_out(input_ids, 0.3, self.config.vocab_size, self.bos_id, self.eos_id, self.pad_id)
+          if self.da_method is not None:
+            if self.da_method == 'replace':
+              input_ids = self.word_replacement(input_ids)
+              decoder_input_ids = self.word_replacement(labels)
+            if self.da_method == 'switchout':
+              input_ids = self.switch_out(input_ids, 0.3, self.config.vocab_size, self.bos_id, self.eos_id, self.pad_id)
+              decoder_input_ids = self.switch_out(labels, 0.3, self.config.vocab_size, self.bos_id, self.eos_id, self.pad_id)
+          else:
+            input_ids = input_ids
             decoder_input_ids = labels
+
             decoder_input_ids = shift_tokens_right(decoder_input_ids, self.config.pad_token_id)
 
         outputs = self.model(
