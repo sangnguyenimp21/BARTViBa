@@ -19,6 +19,8 @@ from transformers.file_utils import (
 )
 from torch.nn import CrossEntropyLoss
 import numpy as np
+from torch.autograd import Variable
+import random
 
 
 
@@ -139,6 +141,72 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
                 if np.random.randn(1)[0] < self.word_replacement_ratio:
                     batch_ids[batch_idx][token_idx] = np.random.randint(0, embedding_size)
         return batch_ids
+    
+    def switch_out(self, sents, tau, vocab_size, bos_id, eos_id, pad_id):
+        """
+        Sample a batch of corrupted examples from sents.
+
+        Args:
+        sents: Tensor [batch_size, n_steps]. The input sentences.
+        tau: Temperature.
+        vocab_size: to create valid samples.
+        Returns:
+        sampled_sents: Tensor [batch_size, n_steps]. The corrupted sentences.
+
+        """
+        mask = torch.eq(sents, bos_id) | torch.eq(sents, eos_id) | torch.eq(sents, pad_id)
+        mask = mask.data.type('torch.ByteTensor') #converting to byte tensor for masked_fill in built function
+        lengths = mask.float().sum(dim=1)
+        batch_size, n_steps = sents.size()
+
+        # first, sample the number of words to corrupt for each sentence
+        logits = torch.arange(n_steps, dtype=torch.float)
+        large_negative = -1e9
+        logits = logits.mul_(-1).unsqueeze(0).expand_as(sents).contiguous().masked_fill_(mask, large_negative)
+        logits = Variable(logits)
+        probs = torch.nn.functional.softmax(logits.mul_(tau), dim=1)
+        # probs_float = torch.nn.functional.softmax(logits.mul_(tau), dim=1)
+        # probs = probs_float.type(torch.long)
+
+        # finding corrupt sampels (most likely empty or 1 word) leading to zero prob
+        for idx,prob in enumerate(probs.data):
+            if torch.sum(prob)<= 0 and idx!=0:
+                valid_ind = list(set(range(len(probs.data))))- list(set([idx]))
+                for i in range(100):
+                    new_indx = random.choice(valid_ind)
+                    if not torch.sum(probs.data[new_indx])<= 0:
+                        probs[idx] = probs[new_indx]
+                        break
+                    else:
+                        pass
+
+        # still num_words probs fails likely due to corrupt input, therefore returning the whole original batch
+        try:
+            num_words = torch.distributions.Categorical(probs).sample()
+        except:
+            print ('Returning orignial batch!!!!!!')
+            return sents
+
+        corrupt_pos = num_words.data.float().div_(lengths).unsqueeze(1).expand_as(sents).contiguous().masked_fill_(mask, 0)
+
+        corrupt_pos = torch.bernoulli(corrupt_pos, out=corrupt_pos).byte()
+        total_words = int(corrupt_pos.sum())
+
+        # sample the corrupted values, which will be added to sents
+        corrupt_val = torch.LongTensor(total_words)
+        corrupt_val = corrupt_val.random_(1, vocab_size)
+        corrupts = torch.zeros(batch_size, n_steps).long()
+        corrupts = corrupts.masked_scatter_(corrupt_pos, corrupt_val)
+        corrupts = corrupts.cuda()
+        sampled_sents = sents.add(Variable(corrupts)).remainder_(vocab_size)
+
+        # converting sampled_sents into Variable before returning
+        try:
+            sampled_sents = Variable(sampled_sents)
+        except:
+            pass
+
+        return sampled_sents
 
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -174,8 +242,10 @@ class CustomMbartModel(MBartForConditionalGeneration, ABC):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            input_ids = self.word_replacement(input_ids)
-            decoder_input_ids = self.word_replacement(labels)
+            # input_ids = self.word_replacement(input_ids)
+            # decoder_input_ids = self.word_replacement(labels)
+            input_ids = self.switch_out(input_ids, 0.3, self.config.vocab_size, self.bos_id, self.eos_id, self.pad_id)
+            decoder_input_ids = labels
             decoder_input_ids = shift_tokens_right(decoder_input_ids, self.config.pad_token_id)
 
         outputs = self.model(
